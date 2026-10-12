@@ -26,8 +26,8 @@ Internet
     v
 ALB :80
     |
-    +-- /user ---------> user-service :8080
+    +-- /users ---------> user-service :8080
     |
-    +-- /payment ------> payment-service :8080
+    +-- /payments ------> payment-service :8080
     |
-    +-- /notification -> notification-service :8080
+    +-- /notifications -> notification-service :8080
