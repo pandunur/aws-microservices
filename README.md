@@ -1,6 +1,6 @@
-# AWS Microservices DevOps Project
+# AWS Microservices Project
 
-A hands-on, production-inspired microservices architecture built on AWS using Docker, Amazon ECR, ECS Fargate, and Application Load Balancer.
+A hands-on, production-inspired microservices architecture built on AWS using Docker, Amazon ECR, ECS Fargate, and Application Load Balancer. CI/CD pipeline to automate pushing images to ECR and deploy with ECS Fargate.
 
 ## Architecture
 
