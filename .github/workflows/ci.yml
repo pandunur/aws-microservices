@@ -31,7 +31,7 @@ jobs:
         run: python -m pip install -r services/user-service/requirements.txt
       
       - name: run unit test
-        run: python -m pytest services/user-service/test/test-app.py
+        run: python -m pytest services/user-service/test/test_app.py
 
   docker-push:
     needs: test
