@@ -1,0 +1,106 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-southeast-3
+  AWS_ACCOUNT_ID: "267544548136"
+  ECS_CLUSTER: aws-ms-dev-cluster
+  ECS_SERVICE: aws-ms-dev-user-service
+  ECR_REPOSITORY: aws-ms-dev-user-service
+  CONTAINER_NAME: user-service
+
+jobs:
+  deploy:
+    name: Deploy to ECS
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ECS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Get current task definition
+        run: |
+          aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].taskDefinition' \
+            --output text > task-definition-arn.txt
+
+      - name: Download task definition
+        run: |
+          echo "Task definition ARN:"
+          cat task-definition-arn.txt
+
+          aws ecs describe-task-definition \
+            --task-definition "$(cat task-definition-arn.txt)" \
+            --query 'taskDefinition' \
+            --output json > task-definition.json
+
+          echo "Task definition downloaded:"
+          ls -lh task-definition.json
+
+      - name: Update image
+        run: |
+          IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}"
+
+          echo "Deploying image:"
+          echo "$IMAGE"
+
+          jq \
+            --arg IMAGE "$IMAGE" \
+            --arg CONTAINER "${{ env.CONTAINER_NAME }}" \
+            '.containerDefinitions |= map(
+              if .name == $CONTAINER
+              then .image = $IMAGE
+              else .
+              end
+            )
+            | del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy
+              )' \
+            task-definition.json > task-definition-new.json
+
+      - name: Register new task definition
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://task-definition-new.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text > new-task-definition-arn.txt
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition $(cat new-task-definition-arn.txt)
+
+      - name: Wait for ECS deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
